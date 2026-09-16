@@ -1,68 +1,119 @@
-import streamlit as st
+import pygame
 import random
-import time
-import pandas as pd
 
-# Configuración de la página
-st.set_page_config(page_title="Simulador Kola Real", layout="centered")
+# Inicializar Pygame
+pygame.init()
+WIDTH, HEIGHT = 850, 400
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Simulador 2D - Clasificación Kola Real")
+clock = pygame.time.Clock()
 
-st.title("🏭 Simulación de Clasificación - Kola Real")
-st.markdown("Panel de control interactivo para la línea automatizada con visión artificial.")
+# Definición de Colores
+WHITE = (245, 245, 245)
+BELT_GRAY = (120, 120, 120)
+CAMERA_BLUE = (0, 122, 204)
+TEXT_COLOR = (50, 50, 50)
 
-# Control de variables de entrada
-total_botellas = st.slider("Cantidad de botellas en el lote:", min_value=5, max_value=100, value=15)
+COLOR_ROJA = (220, 20, 60)   # KR Fresa
+COLOR_AMARILLA = (255, 215, 0) # KR Piña
+COLOR_NEGRA = (30, 30, 30)   # KR Cola
 
-# Botón para iniciar el proceso
-if st.button("Iniciar Simulación", type="primary"):
-    
-    sabores = ["KR Roja (Fresa)", "KR Amarilla (Piña)", "KR Negra (Cola)"]
-    carriles = {"KR Roja (Fresa)": 0, "KR Amarilla (Piña)": 0, "KR Negra (Cola)": 0}
-    
-    # Elementos visuales que se actualizarán en tiempo real
-    barra_progreso = st.progress(0)
-    estado_texto = st.empty()
-    
-    st.markdown("### Contadores en Tiempo Real")
-    col1, col2, col3 = st.columns(3)
-    metrica_roja = col1.empty()
-    metrica_amarilla = col2.empty()
-    metrica_negra = col3.empty()
-    
-    # Inicializar contadores en 0
-    metrica_roja.metric("Carril A (Fresa)", 0)
-    metrica_amarilla.metric("Carril B (Piña)", 0)
-    metrica_negra.metric("Carril C (Cola)", 0)
-    
-    st.divider()
-    
-    # Bucle de simulación
-    for i in range(1, total_botellas + 1):
-        # Probabilidad de producción (KR Negra tiene mayor demanda)
-        botella = random.choices(sabores, weights=[30, 30, 40])[0]
+# Fuentes de texto
+font = pygame.font.SysFont("Arial", 16, bold=True)
+title_font = pygame.font.SysFont("Arial", 22, bold=True)
+
+# Contadores
+contadores = {'Fresa': 0, 'Piña': 0, 'Cola': 0}
+
+class Botella:
+    def __init__(self):
+        self.x = 0
+        self.y = 200
+        self.tipo = random.choices(['Fresa', 'Piña', 'Cola'], weights=[30, 30, 40])[0]
+        self.speed_x = 4
+        self.speed_y = 2
         
-        # Fase 1: Ingreso
-        estado_texto.info(f"Botella {i}/{total_botellas} en faja principal. [Esperando cámara...]")
-        time.sleep(0.3)
-        
-        # Fase 2: Detección y Desvío
-        estado_texto.warning(f"📷 Cámara IA detecta: **{botella}**. Activando servomotor...")
-        carriles[botella] += 1
-        
-        # Actualizar métricas dinámicamente
-        metrica_roja.metric("Carril A (Fresa)", carriles["KR Roja (Fresa)"])
-        metrica_amarilla.metric("Carril B (Piña)", carriles["KR Amarilla (Piña)"])
-        metrica_negra.metric("Carril C (Cola)", carriles["KR Negra (Cola)"])
-        
-        # Actualizar barra de progreso
-        barra_progreso.progress(i / total_botellas)
-        time.sleep(0.3)
-        
-    estado_texto.success("✅ ¡Lote clasificado con éxito!")
+        # Asignar color y carril de destino según el sabor
+        if self.tipo == 'Fresa':
+            self.color = COLOR_ROJA
+            self.target_y = 80
+        elif self.tipo == 'Piña':
+            self.color = COLOR_AMARILLA
+            self.target_y = 200
+        else:
+            self.color = COLOR_NEGRA
+            self.target_y = 320
+
+    def move(self):
+        # Movimiento en la faja principal
+        if self.x < 400:
+            self.x += self.speed_x
+        else:
+            # Movimiento de desvío (Servomotores)
+            self.x += self.speed_x
+            if self.y < self.target_y:
+                self.y += self.speed_y
+            elif self.y > self.target_y:
+                self.y -= self.speed_y
+
+    def draw(self, surface):
+        # Dibujar la botella (Círculo)
+        pygame.draw.circle(surface, self.color, (int(self.x), int(self.y)), 12)
+        # Brillo del envase
+        pygame.draw.circle(surface, (255,255,255), (int(self.x - 4), int(self.y - 4)), 3)
+
+botellas = []
+spawn_timer = 0
+
+running = True
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+            
+    screen.fill(WHITE)
     
-    # Generar tabla final
-    st.markdown("### Reporte Final de Lote")
-    df_resultados = pd.DataFrame(
-        list(carriles.items()), 
-        columns=["Producto Detectado", "Unidades Empaquetadas"]
-    )
-    st.dataframe(df_resultados, use_container_width=True)
+    # 1. Dibujar Fajas Transportadoras
+    # Faja Principal
+    pygame.draw.rect(screen, BELT_GRAY, (0, 185, 400, 30))
+    # Carriles de desvío
+    pygame.draw.rect(screen, BELT_GRAY, (400, 65, 450, 30))  # Carril A (Arriba)
+    pygame.draw.rect(screen, BELT_GRAY, (400, 185, 450, 30)) # Carril B (Centro)
+    pygame.draw.rect(screen, BELT_GRAY, (400, 305, 450, 30)) # Carril C (Abajo)
+    
+    # 2. Dibujar la Cámara Inteligente
+    pygame.draw.rect(screen, CAMERA_BLUE, (380, 130, 40, 40), border_radius=5)
+    pygame.draw.circle(screen, (20,20,20), (400, 150), 10) # Lente
+    
+    # 3. Lógica de aparición de botellas (Spawner)
+    spawn_timer += 1
+    if spawn_timer > 45: # Generar una botella cada 45 frames
+        botellas.append(Botella())
+        spawn_timer = 0
+        
+    # 4. Mover y dibujar botellas
+    for b in botellas[:]:
+        b.move()
+        b.draw(screen)
+        
+        # Si pasa por la cámara, sumar al contador (solo cuenta una vez)
+        if 398 <= b.x <= 402:
+            contadores[b.tipo] += 1
+            
+        # Eliminar botella si sale de la pantalla
+        if b.x > WIDTH + 20:
+            botellas.remove(b)
+            
+    # 5. Textos e Interfaz
+    screen.blit(title_font.render("Simulador de Selección Visual - Industrias San Miguel", True, TEXT_COLOR), (20, 20))
+    
+    # Etiquetas de carriles
+    screen.blit(font.render(f"Carril A (Fresa): {contadores['Fresa']}", True, COLOR_ROJA), (650, 40))
+    screen.blit(font.render(f"Carril B (Piña): {contadores['Piña']}", True, (200, 180, 0)), (650, 160))
+    screen.blit(font.render(f"Carril C (Cola): {contadores['Cola']}", True, COLOR_NEGRA), (650, 280))
+    screen.blit(font.render("Sensor Cámara IA", True, CAMERA_BLUE), (340, 105))
+
+    pygame.display.flip()
+    clock.tick(60) # 60 FPS (Velocidad de la simulación)
+
+pygame.quit()
